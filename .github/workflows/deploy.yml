@@ -10,6 +10,29 @@ jobs:
   ci-build:
     name: Validar Build y Tipos
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci?schema=public"
+      DIRECT_URL: "postgresql://ci:ci@localhost:5432/ci?schema=public"
+      JWT_ACCESS_SECRET: "ci_access_secret_key_for_build_check_2026"
+      JWT_REFRESH_SECRET: "ci_refresh_secret_key_for_build_check_2026"
+      NEXT_PUBLIC_APP_URL: "https://cospace-jb.coderhivex.com"
+
     steps:
       - name: Descargar código
         uses: actions/checkout@v4
@@ -23,16 +46,10 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
-      - name: Generar cliente Prisma
-        run: npx prisma generate
+      - name: Sincronizar esquema Prisma temporal
+        run: npx prisma db push
 
       - name: Compilar proyecto Next.js
-        env:
-          DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci"
-          DIRECT_URL: "postgresql://ci:ci@localhost:5432/ci"
-          JWT_ACCESS_SECRET: "ci_access_secret_key_for_build_check_2026"
-          JWT_REFRESH_SECRET: "ci_refresh_secret_key_for_build_check_2026"
-          NEXT_PUBLIC_APP_URL: "https://cospace-jb.coderhivex.com"
         run: npm run build
 
   # 2. DESPLIEGUE CONTINUO (CD): Actualiza el servidor EC2 si el CI pasa
@@ -58,7 +75,6 @@ jobs:
             npm ci
 
             echo "🗄️ Sincronizando Prisma con PostgreSQL..."
-            npx prisma generate
             npx prisma db push
 
             echo "⏸️ Deteniendo app temporalmente para liberar RAM durante el build..."
@@ -70,3 +86,4 @@ jobs:
             echo "🚀 Reiniciando aplicación en PM2..."
             pm2 restart nextjs-app --update-env
             pm2 save
+            
