@@ -17,7 +17,7 @@ export default function NotFound() {
             🐼
           </div>
           <div className="px-3 py-1 rounded-lg bg-gray-100 dark:bg-slate-700 text-[10px] font-black uppercase tracking-widest text-gray-600 dark:text-slate-300">
-            PAGE NOT FOUND
+            PA DONDE VAS?????
           </div>
         </div>
 
