@@ -1,0 +1,72 @@
+name: CI/CD - Build & Deploy to AWS EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  # 1. INTEGRACIÓN CONTINUA (CI): Valida que el código compile antes de tocar producción
+  ci-build:
+    name: Validar Build y Tipos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Generar cliente Prisma
+        run: npx prisma generate
+
+      - name: Compilar proyecto Next.js
+        env:
+          DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci"
+          DIRECT_URL: "postgresql://ci:ci@localhost:5432/ci"
+          JWT_ACCESS_SECRET: "ci_access_secret_key_for_build_check_2026"
+          JWT_REFRESH_SECRET: "ci_refresh_secret_key_for_build_check_2026"
+          NEXT_PUBLIC_APP_URL: "https://cospace-jb.coderhivex.com"
+        run: npm run build
+
+  # 2. DESPLIEGUE CONTINUO (CD): Actualiza el servidor EC2 si el CI pasa
+  cd-deploy:
+    name: Desplegar en AWS EC2
+    needs: ci-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Desplegar vía SSH en EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/Prueba-Desempe-o-Modulo-Next
+
+            echo "📥 Descargando últimos cambios..."
+            git pull origin main
+
+            echo "📦 Instalando dependencias..."
+            npm ci
+
+            echo "🗄️ Sincronizando Prisma con PostgreSQL..."
+            npx prisma generate
+            npx prisma db push
+
+            echo "⏸️ Deteniendo app temporalmente para liberar RAM durante el build..."
+            pm2 stop nextjs-app || true
+
+            echo "🏗️ Compilando versión de producción..."
+            NODE_OPTIONS="--max-old-space-size=1536" npm run build
+
+            echo "🚀 Reiniciando aplicación en PM2..."
+            pm2 restart nextjs-app --update-env
+            pm2 save
