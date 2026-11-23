@@ -81,7 +81,7 @@ export default function HomePage() {
               name="type"
               value={filters.type}
               onChange={handleFilterChange}
-              className="w-full px-3.5 py-2.5 text-xs sm:text-sm font-semibold rounded-xl border border-gray-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6D28D9] bg-gray-50/50 dark:bg-slate-800 text-gray-800 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-750 transition-all cursor-pointer"
+              className="w-full px-3.5 py-2.5 text-xs sm:text-sm font-semibold rounded-xl border border-gray-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6D28D9] bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 hover:bg-white dark:hover:bg-slate-700/80 transition-all cursor-pointer"
             >
               <option value="">{t.home.allTypes}</option>
               <option value="Escritorio">{t.home.desk}</option>
@@ -102,7 +102,7 @@ export default function HomePage() {
               placeholder="Ej. 1"
               value={filters.minCapacity}
               onChange={handleFilterChange}
-              className="w-full px-3.5 py-2.5 text-xs sm:text-sm font-semibold rounded-xl border border-gray-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6D28D9] bg-gray-50/50 dark:bg-slate-800 text-gray-800 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-750 transition-all"
+              className="w-full px-3.5 py-2.5 text-xs sm:text-sm font-semibold rounded-xl border border-gray-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6D28D9] bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 hover:bg-white dark:hover:bg-slate-700/80 transition-all"
             />
           </div>
 
@@ -119,7 +119,7 @@ export default function HomePage() {
               placeholder="Ej. 50000"
               value={filters.maxPrice}
               onChange={handleFilterChange}
-              className="w-full px-3.5 py-2.5 text-xs sm:text-sm font-semibold rounded-xl border border-gray-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6D28D9] bg-gray-50/50 dark:bg-slate-800 text-gray-800 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-750 transition-all"
+              className="w-full px-3.5 py-2.5 text-xs sm:text-sm font-semibold rounded-xl border border-gray-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6D28D9] bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 hover:bg-white dark:hover:bg-slate-700/80 transition-all"
             />
           </div>
 
@@ -128,7 +128,7 @@ export default function HomePage() {
             <button
               onClick={handleClearFilters}
               type="button"
-              className="w-full py-2.5 px-4 text-xs sm:text-sm font-bold text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-xl transition-all active:scale-95 cursor-pointer"
+              className="w-full py-2.5 px-4 text-xs sm:text-sm font-bold text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700/80 rounded-xl transition-all active:scale-95 cursor-pointer"
             >
               {t.home.resetFilters}
             </button>

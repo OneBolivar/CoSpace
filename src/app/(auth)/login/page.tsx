@@ -89,7 +89,7 @@ function LoginForm() {
             placeholder="tu@correo.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-4 py-3 text-sm rounded-xl border border-gray-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6D28D9] bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white transition-all hover:bg-white dark:hover:bg-slate-750"
+            className="w-full px-4 py-3 text-sm rounded-xl border border-gray-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6D28D9] bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 transition-all hover:bg-white dark:hover:bg-slate-700/80"
           />
         </div>
 
@@ -103,7 +103,7 @@ function LoginForm() {
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-3 text-sm rounded-xl border border-gray-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6D28D9] bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-white transition-all hover:bg-white dark:hover:bg-slate-750"
+            className="w-full px-4 py-3 text-sm rounded-xl border border-gray-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#6D28D9] bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 transition-all hover:bg-white dark:hover:bg-slate-700/80"
           />
         </div>
 

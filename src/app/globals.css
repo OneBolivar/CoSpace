@@ -3,6 +3,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
+  color-scheme: light;
   --color-primary: #6d28d9;
   --color-primary-hover: #5b21b6;
   --color-secondary: #ec4899;
@@ -15,7 +16,9 @@
   --color-border-subtle: #e2e8f0;
 }
 
+:root.dark,
 .dark {
+  color-scheme: dark;
   --color-primary: #8b5cf6;
   --color-primary-hover: #7c3aed;
   --color-secondary: #f472b6;
@@ -33,4 +36,22 @@ body {
   color: var(--color-text-main);
   font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   min-height: 100vh;
+}
+
+/* Reglas de autofill para modo oscuro (elimina fondo blanco en Login y Register) */
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus,
+.dark select:-webkit-autofill,
+.dark textarea:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0px 1000px #1e293b inset !important;
+  -webkit-text-fill-color: #f8fafc !important;
+  caret-color: #f8fafc !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Opciones de select nativo en modo oscuro */
+.dark select option {
+  background-color: #1e293b;
+  color: #f8fafc;
 }

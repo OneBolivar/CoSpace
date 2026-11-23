@@ -19,8 +19,8 @@ export default function AdminSpacesPage() {
     name: "",
     description: "",
     type: "Escritorio",
-    capacity: 1,
-    pricePerHour: 15000,
+    capacity: "1",
+    pricePerHour: "15000",
     imageUrl: DEFAULT_FALLBACK_IMAGE,
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -65,8 +65,8 @@ export default function AdminSpacesPage() {
       name: "",
       description: "",
       type: "Escritorio",
-      capacity: 1,
-      pricePerHour: 15000,
+      capacity: "1",
+      pricePerHour: "15000",
       imageUrl: DEFAULT_FALLBACK_IMAGE,
     });
   };
@@ -132,12 +132,17 @@ export default function AdminSpacesPage() {
         imageToSave = uploadData.key;
       }
 
+      const parsedCapacity = Number(formData.capacity) > 0 ? Number(formData.capacity) : 1;
+      const parsedPricePerHour = Number(formData.pricePerHour) >= 0 ? Number(formData.pricePerHour) : 0;
+
       // 2. Crear el espacio en RDS con la key de S3
       const res = await fetch("/api/spaces", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
+          capacity: parsedCapacity,
+          pricePerHour: parsedPricePerHour,
           imageUrl: imageToSave,
         }),
       });
@@ -334,7 +339,7 @@ export default function AdminSpacesPage() {
                   placeholder="Ej. Oficina Ejecutiva 302"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#6D28D9]"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#6D28D9]"
                 />
               </div>
 
@@ -348,7 +353,7 @@ export default function AdminSpacesPage() {
                   placeholder="Describe las características y ambiente del espacio..."
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#6D28D9]"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#6D28D9]"
                 />
               </div>
 
@@ -360,7 +365,7 @@ export default function AdminSpacesPage() {
                   <select
                     value={formData.type}
                     onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#6D28D9]"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#6D28D9] cursor-pointer"
                   >
                     <option value="Escritorio">Escritorio</option>
                     <option value="Sala de reuniones">Sala de reuniones</option>
@@ -376,9 +381,10 @@ export default function AdminSpacesPage() {
                     type="number"
                     min="1"
                     required
+                    placeholder="Ej. 4"
                     value={formData.capacity}
-                    onChange={(e) => setFormData({ ...formData, capacity: Number(e.target.value) })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#6D28D9]"
+                    onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#6D28D9]"
                   />
                 </div>
               </div>
@@ -392,9 +398,10 @@ export default function AdminSpacesPage() {
                   min="1000"
                   step="1000"
                   required
+                  placeholder="Ej. 25000"
                   value={formData.pricePerHour}
-                  onChange={(e) => setFormData({ ...formData, pricePerHour: Number(e.target.value) })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#6D28D9]"
+                  onChange={(e) => setFormData({ ...formData, pricePerHour: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#6D28D9]"
                 />
               </div>
 
