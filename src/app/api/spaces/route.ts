@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "@/lib/auth";
 import { validateSpaceData } from "@/lib/validators";
+import { resolveSpaceImageUrl } from "@/lib/s3/storage.service";
 import { Prisma, Role } from "@prisma/client";
 
-// GET /api/spaces - Listar y filtrar espacios de coworking
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const { searchParams } = new URL(request.url);
@@ -16,10 +16,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const session = await getServerSession();
     const isAdmin = session?.role === Role.ADMIN;
 
-    // Filtros dinámicos con Prisma
     const whereClause: Prisma.SpaceWhereInput = {};
 
-    // Si no es admin o no solicita inactivos, solo mostrar espacios activos
     if (!isAdmin || !includeInactive) {
       whereClause.isActive = true;
     }
@@ -43,10 +41,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       };
     }
 
-    const spaces = await prisma.space.findMany({
+    const rawSpaces = await prisma.space.findMany({
       where: whereClause,
       orderBy: { createdAt: "desc" },
     });
+
+    const spaces = await Promise.all(
+      rawSpaces.map(async (space) => ({
+        ...space,
+        imageUrl: await resolveSpaceImageUrl(space.imageUrl),
+      }))
+    );
 
     return NextResponse.json({ spaces }, { status: 200 });
   } catch (error) {
@@ -58,7 +63,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 }
 
-// POST /api/spaces - Crear nuevo espacio (Exclusivo Administrador)
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const session = await getServerSession();
@@ -95,7 +99,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(
       {
         message: "Espacio creado exitosamente.",
-        space: newSpace,
+        space: {
+          ...newSpace,
+          imageUrl: await resolveSpaceImageUrl(newSpace.imageUrl),
+        },
       },
       { status: 201 }
     );

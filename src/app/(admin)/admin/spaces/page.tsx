@@ -5,6 +5,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { Space } from "@/types/space";
 
+const DEFAULT_FALLBACK_IMAGE =
+  "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80";
+
 export default function AdminSpacesPage() {
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -12,15 +15,16 @@ export default function AdminSpacesPage() {
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Estado del formulario de creación
   const [formData, setFormData] = useState({
     name: "",
     description: "",
     type: "Escritorio",
     capacity: 1,
     pricePerHour: 15000,
-    imageUrl: "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80",
+    imageUrl: DEFAULT_FALLBACK_IMAGE,
   });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchSpaces = useCallback(async () => {
@@ -41,6 +45,31 @@ export default function AdminSpacesPage() {
   useEffect(() => {
     fetchSpaces();
   }, [fetchSpaces]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    setSelectedFile(file);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewUrl(file ? URL.createObjectURL(file) : null);
+  };
+
+  const resetModalState = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    setFormData({
+      name: "",
+      description: "",
+      type: "Escritorio",
+      capacity: 1,
+      pricePerHour: 15000,
+      imageUrl: DEFAULT_FALLBACK_IMAGE,
+    });
+  };
 
   const handleToggleActive = async (space: Space) => {
     setTogglingId(space.id);
@@ -76,10 +105,41 @@ export default function AdminSpacesPage() {
     setFeedback(null);
 
     try {
+      let imageToSave = formData.imageUrl;
+
+      // 1. Si el administrador seleccionó una imagen local, subirla primero a AWS S3
+      if (selectedFile) {
+        const uploadBody = new FormData();
+        uploadBody.append("file", selectedFile);
+        uploadBody.append("folder", "spaces");
+
+        const uploadRes = await fetch("/api/uploads", {
+          method: "POST",
+          body: uploadBody,
+        });
+
+        const uploadData = await uploadRes.json();
+
+        if (!uploadRes.ok) {
+          setFeedback({
+            type: "error",
+            text: uploadData.error || "Error al subir la imagen a AWS S3.",
+          });
+          setIsSubmitting(false);
+          return;
+        }
+
+        imageToSave = uploadData.key;
+      }
+
+      // 2. Crear el espacio en RDS con la key de S3
       const res = await fetch("/api/spaces", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          imageUrl: imageToSave,
+        }),
       });
 
       const data = await res.json();
@@ -89,16 +149,14 @@ export default function AdminSpacesPage() {
         return;
       }
 
-      setFeedback({ type: "success", text: "¡Nuevo espacio creado satisfactoriamente!" });
-      setIsModalOpen(false);
-      setFormData({
-        name: "",
-        description: "",
-        type: "Escritorio",
-        capacity: 1,
-        pricePerHour: 15000,
-        imageUrl: "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80",
+      setFeedback({
+        type: "success",
+        text: selectedFile
+          ? "¡Espacio creado y fotografía almacenada en AWS S3!"
+          : "¡Nuevo espacio creado satisfactoriamente!",
       });
+      setIsModalOpen(false);
+      resetModalState();
       fetchSpaces();
     } catch {
       setFeedback({ type: "error", text: "Error de conexión al guardar el espacio." });
@@ -109,7 +167,6 @@ export default function AdminSpacesPage() {
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-8 flex-1">
-      {/* Cabecera */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#EC4899]/15 text-[#EC4899] dark:text-[#F472B6] text-xs font-bold uppercase tracking-wider mb-2">
@@ -154,7 +211,6 @@ export default function AdminSpacesPage() {
         </div>
       )}
 
-      {/* Grid de Espacios Existentes */}
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {[1, 2, 3].map((n) => (
@@ -251,15 +307,17 @@ export default function AdminSpacesPage() {
         </div>
       )}
 
-      {/* Modal / Panel Flotante para Crear Espacio */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
           <div className="bg-white dark:bg-[#1E293B] rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-gray-100 dark:border-slate-800 space-y-5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-black text-[#111827] dark:text-white">Crear Nuevo Espacio</h2>
               <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 text-lg font-bold"
+                onClick={() => {
+                  setIsModalOpen(false);
+                  resetModalState();
+                }}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 text-lg font-bold cursor-pointer"
               >
                 ✕
               </button>
@@ -325,50 +383,64 @@ export default function AdminSpacesPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1 text-[11px]">
-                    Precio Hora (COP)
-                  </label>
-                  <input
-                    type="number"
-                    min="1000"
-                    step="1000"
-                    required
-                    value={formData.pricePerHour}
-                    onChange={(e) => setFormData({ ...formData, pricePerHour: Number(e.target.value) })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#6D28D9]"
-                  />
-                </div>
+              <div>
+                <label className="block font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1 text-[11px]">
+                  Precio Hora (COP)
+                </label>
+                <input
+                  type="number"
+                  min="1000"
+                  step="1000"
+                  required
+                  value={formData.pricePerHour}
+                  onChange={(e) => setFormData({ ...formData, pricePerHour: Number(e.target.value) })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#6D28D9]"
+                />
+              </div>
 
-                <div>
-                  <label className="block font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1 text-[11px]">
-                    URL Imagen
-                  </label>
-                  <input
-                    type="url"
-                    required
-                    value={formData.imageUrl}
-                    onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#6D28D9]"
-                  />
-                </div>
+              <div>
+                <label className="block font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1 text-[11px]">
+                  Fotografía del Espacio (AWS S3 · JPG, PNG, WEBP · Máx 5MB)
+                </label>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleFileChange}
+                  className="w-full text-xs text-gray-600 dark:text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#6D28D9]/15 file:text-[#6D28D9] dark:file:text-[#A78BFA] hover:file:bg-[#6D28D9]/25 cursor-pointer"
+                />
+                {previewUrl && (
+                  <div className="mt-3 relative h-36 w-full rounded-2xl overflow-hidden border border-gray-200 dark:border-slate-700">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={previewUrl}
+                      alt="Vista previa"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="pt-4 flex items-center justify-end gap-3 border-t border-gray-100 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2.5 font-bold text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl"
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    resetModalState();
+                  }}
+                  className="px-4 py-2.5 font-bold text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-5 py-2.5 font-bold text-white bg-[#6D28D9] hover:bg-[#5B21B6] rounded-xl shadow-md shadow-purple-600/30 disabled:opacity-50"
+                  className="px-5 py-2.5 font-bold text-white bg-[#6D28D9] hover:bg-[#5B21B6] rounded-xl shadow-md shadow-purple-600/30 disabled:opacity-50 cursor-pointer"
                 >
-                  {isSubmitting ? "Guardando..." : "Crear Espacio"}
+                  {isSubmitting
+                    ? selectedFile
+                      ? "Subiendo a S3..."
+                      : "Guardando..."
+                    : "Crear Espacio"}
                 </button>
               </div>
             </form>
@@ -378,4 +450,3 @@ export default function AdminSpacesPage() {
     </div>
   );
 }
-

@@ -174,7 +174,7 @@ export function validateSpaceData(data: Partial<SpaceInput>): ValidationResult {
     };
   }
 
-  if (!data.imageUrl || !data.imageUrl.startsWith("http")) {
+  if (!data.imageUrl || (!data.imageUrl.startsWith("http") && !data.imageUrl.startsWith("spaces/"))) {
     return {
       isValid: false,
       error: "Debes proporcionar una URL de imagen válida (http/https).",

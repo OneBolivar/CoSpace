@@ -1,6 +1,7 @@
 import React, { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { resolveSpaceImageUrl } from "@/lib/s3/storage.service";
 import { SpaceDetailClient } from "@/components/spaces/SpaceDetailClient";
 import { Space } from "@/types/space";
 
@@ -9,7 +10,6 @@ interface SpaceDetailPageProps {
 }
 
 async function SpaceDetailContent({ params }: SpaceDetailPageProps) {
-  // En Next.js 16 los parámetros de ruta deben resolverse de forma asíncrona
   const { id } = await params;
 
   const space = await prisma.space.findUnique({
@@ -20,7 +20,8 @@ async function SpaceDetailContent({ params }: SpaceDetailPageProps) {
     notFound();
   }
 
-  // Desacoplamos y tipamos el modelo para el cliente
+  const resolvedImageUrl = await resolveSpaceImageUrl(space.imageUrl);
+
   const serializedSpace: Space = {
     id: space.id,
     name: space.name,
@@ -28,7 +29,7 @@ async function SpaceDetailContent({ params }: SpaceDetailPageProps) {
     type: space.type,
     capacity: space.capacity,
     pricePerHour: space.pricePerHour,
-    imageUrl: space.imageUrl,
+    imageUrl: resolvedImageUrl,
     isActive: space.isActive,
     createdAt: space.createdAt.toISOString(),
     updatedAt: space.updatedAt.toISOString(),
@@ -54,4 +55,3 @@ export default function SpaceDetailPage({ params }: SpaceDetailPageProps) {
     </Suspense>
   );
 }
-
