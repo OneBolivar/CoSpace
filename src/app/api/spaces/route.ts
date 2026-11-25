@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "@/lib/auth";
 import { validateSpaceData } from "@/lib/validators";
-import { resolveSpaceImageUrl } from "@/lib/s3/storage.service";
+import {
+  resolveSpaceImageUrl,
+  resolveSpaceThumbnailUrl,
+} from "@/lib/s3/storage.service";
 import { Prisma, Role } from "@prisma/client";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -49,7 +52,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const spaces = await Promise.all(
       rawSpaces.map(async (space) => ({
         ...space,
-        imageUrl: await resolveSpaceImageUrl(space.imageUrl),
+        imageUrl: await resolveSpaceThumbnailUrl(space.imageUrl),
       }))
     );
 

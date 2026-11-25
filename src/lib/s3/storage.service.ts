@@ -1,13 +1,14 @@
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { randomUUID } from "node:crypto";
 import { s3Client } from "./client";
 
-export type StorageFolder = "spaces" | "avatars" | "documents";
+export type StorageFolder = "originals" | "spaces" | "avatars" | "documents";
 
 export interface UploadFileInput {
   buffer: Buffer;
@@ -49,6 +50,38 @@ export async function resolveSpaceImageUrl(imageUrl: string): Promise<string> {
   if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
     return imageUrl;
   }
+  return getPresignedFileUrl(imageUrl);
+}
+
+/**
+ * Resolves a space card thumbnail URL: returns http/https URLs as-is, checks S3
+ * for a Lambda-generated thumbnail under `thumbnails/` when the key starts with
+ * `originals/` (falling back to the original key if not yet available), and signs
+ * legacy `spaces/` keys directly.
+ */
+export async function resolveSpaceThumbnailUrl(
+  imageUrl: string
+): Promise<string> {
+  if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+    return imageUrl;
+  }
+
+  if (imageUrl.startsWith("originals/")) {
+    const thumbnailKey = imageUrl.replace(/^originals\//, "thumbnails/");
+    try {
+      const bucket = getBucketName();
+      await s3Client.send(
+        new HeadObjectCommand({
+          Bucket: bucket,
+          Key: thumbnailKey,
+        })
+      );
+      return getPresignedFileUrl(thumbnailKey);
+    } catch {
+      return getPresignedFileUrl(imageUrl);
+    }
+  }
+
   return getPresignedFileUrl(imageUrl);
 }
 

@@ -111,7 +111,7 @@ export default function AdminSpacesPage() {
       if (selectedFile) {
         const uploadBody = new FormData();
         uploadBody.append("file", selectedFile);
-        uploadBody.append("folder", "spaces");
+        uploadBody.append("folder", "originals");
 
         const uploadRes = await fetch("/api/uploads", {
           method: "POST",

@@ -12,7 +12,12 @@ const ALLOWED_MIME_TYPES: Record<string, string> = {
   "application/pdf": "pdf",
 };
 
-const VALID_FOLDERS: StorageFolder[] = ["spaces", "avatars", "documents"];
+const VALID_FOLDERS: StorageFolder[] = [
+  "originals",
+  "spaces",
+  "avatars",
+  "documents",
+];
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 export async function POST(request: NextRequest): Promise<NextResponse> {

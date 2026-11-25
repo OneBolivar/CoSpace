@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "@/lib/auth";
+import { resolveSpaceImageUrl } from "@/lib/s3/storage.service";
 import { Role } from "@prisma/client";
 
 interface RouteContext {
@@ -38,7 +39,15 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ space }, { status: 200 });
+    return NextResponse.json(
+      {
+        space: {
+          ...space,
+          imageUrl: await resolveSpaceImageUrl(space.imageUrl),
+        },
+      },
+      { status: 200 }
+    );
   } catch (error) {
     console.error("Error en GET /api/spaces/[id]:", error);
     return NextResponse.json(
