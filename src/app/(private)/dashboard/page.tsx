@@ -28,10 +28,14 @@ export default function DashboardPage() {
       }
     };
 
+    if (authLoading) return;
+
     if (user) {
       fetchUserBookings();
+    } else {
+      setIsLoading(false);
     }
-  }, [user]);
+  }, [user, authLoading]);
 
   if (authLoading || isLoading) {
     return (
