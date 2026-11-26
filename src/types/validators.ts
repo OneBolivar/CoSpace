@@ -1,3 +1,5 @@
+import type { PricingModel } from "@prisma/client";
+
 export interface ValidationResult {
   isValid: boolean;
   error?: string;
@@ -16,6 +18,8 @@ export interface SpaceInput {
   description: string;
   type: string;
   capacity: number;
+  pricingModel?: PricingModel;
   pricePerHour: number;
+  pricePerPerson?: number | null;
   imageUrl: string;
 }

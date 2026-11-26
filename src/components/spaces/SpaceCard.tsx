@@ -13,11 +13,18 @@ interface SpaceCardProps {
 export function SpaceCard({ space }: SpaceCardProps) {
   const { t, locale } = useI18n();
 
-  const formattedPrice = new Intl.NumberFormat(locale === "es" ? "es-CO" : "en-US", {
-    style: "currency",
-    currency: "COP",
-    maximumFractionDigits: 0,
-  }).format(space.pricePerHour);
+  const formatCOP = (amount: number) =>
+    new Intl.NumberFormat(locale === "es" ? "es-CO" : "en-US", {
+      style: "currency",
+      currency: "COP",
+      maximumFractionDigits: 0,
+    }).format(amount);
+
+  const pricingModel = space.pricingModel ?? "PER_SPACE";
+  const hasPerPerson =
+    (pricingModel === "PER_PERSON" || pricingModel === "BOTH") &&
+    typeof space.pricePerPerson === "number" &&
+    space.pricePerPerson > 0;
 
   return (
     <div className="bg-white dark:bg-[#1E293B] rounded-3xl border border-gray-100 dark:border-slate-800 overflow-hidden shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col group">
@@ -55,14 +62,33 @@ export function SpaceCard({ space }: SpaceCardProps) {
         </div>
 
         {/* Precio y Botón de Acción Directo a la Reserva */}
-        <div className="pt-4 border-t border-gray-100 dark:border-slate-800 flex items-center justify-between">
+        <div className="pt-4 border-t border-gray-100 dark:border-slate-800 flex items-center justify-between gap-2">
           <div>
             <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-slate-400 tracking-wider block">
               {t.home.perHour}
             </span>
-            <span className="text-base sm:text-lg font-black text-[#111827] dark:text-white">
-              {formattedPrice}
-            </span>
+            {pricingModel === "PER_PERSON" && hasPerPerson ? (
+              <span className="text-base sm:text-lg font-black text-[#111827] dark:text-white">
+                {t.home.fromPerPerson} {formatCOP(space.pricePerPerson!)}
+                <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 ml-1">
+                  {t.home.perPersonSuffix}
+                </span>
+              </span>
+            ) : (
+              <div>
+                <span className="text-base sm:text-lg font-black text-[#111827] dark:text-white">
+                  {formatCOP(space.pricePerHour)}
+                  <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 ml-1">
+                    {t.home.perSpaceSuffix}
+                  </span>
+                </span>
+                {pricingModel === "BOTH" && hasPerPerson && (
+                  <span className="block text-[11px] font-semibold text-[#6D28D9] dark:text-[#A78BFA]">
+                    {t.home.fromPerPerson} {formatCOP(space.pricePerPerson!)} {t.home.perPersonSuffix}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           <Link

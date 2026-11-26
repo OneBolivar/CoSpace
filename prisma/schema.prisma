@@ -18,6 +18,12 @@ enum BookingStatus {
   CANCELLED
 }
 
+enum PricingModel {
+  PER_SPACE
+  PER_PERSON
+  BOTH
+}
+
 model User {
   id           String        @id @default(uuid())
   name         String
@@ -37,9 +43,11 @@ model Space {
   name         String
   description  String
   type         String        // Ej: "Escritorio", "Sala de reuniones", "Cabina"
-  capacity     Int
-  pricePerHour Float
-  imageUrl     String
+  capacity       Int
+  pricingModel   PricingModel  @default(PER_SPACE)
+  pricePerHour   Float
+  pricePerPerson Float?
+  imageUrl       String
   isActive     Boolean       @default(true)
   bookings     Booking[]
   createdAt    DateTime      @default(now())
@@ -54,8 +62,10 @@ model Booking {
   spaceId    String
   startTime  DateTime
   endTime    DateTime
-  totalHours Int
-  totalPrice Float
+  totalHours   Int
+  guests       Int           @default(1)
+  pricingModel PricingModel  @default(PER_SPACE)
+  totalPrice   Float
   status     BookingStatus @default(CONFIRMED)
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt

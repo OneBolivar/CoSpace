@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Space } from "@/types/space";
+import { PricingModel, Space } from "@/types/space";
 
 const DEFAULT_FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80";
@@ -13,14 +13,26 @@ export default function AdminSpacesPage() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [editingSpace, setEditingSpace] = useState<Space | null>(null);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string;
+    description: string;
+    type: string;
+    capacity: string;
+    pricingModel: PricingModel;
+    pricePerHour: string;
+    pricePerPerson: string;
+    imageUrl: string;
+  }>({
     name: "",
     description: "",
     type: "Escritorio",
     capacity: "1",
+    pricingModel: "PER_SPACE",
     pricePerHour: "15000",
+    pricePerPerson: "",
     imageUrl: DEFAULT_FALLBACK_IMAGE,
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -46,29 +58,64 @@ export default function AdminSpacesPage() {
     fetchSpaces();
   }, [fetchSpaces]);
 
+  const revokeBlobPreview = (url: string | null) => {
+    if (url && url.startsWith("blob:")) {
+      URL.revokeObjectURL(url);
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
     setSelectedFile(file);
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
+    revokeBlobPreview(previewUrl);
+    if (file) {
+      setPreviewUrl(URL.createObjectURL(file));
+    } else {
+      setPreviewUrl(editingSpace ? editingSpace.imageUrl : null);
     }
-    setPreviewUrl(file ? URL.createObjectURL(file) : null);
   };
 
   const resetModalState = () => {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-    }
+    revokeBlobPreview(previewUrl);
     setSelectedFile(null);
     setPreviewUrl(null);
+    setEditingSpace(null);
     setFormData({
       name: "",
       description: "",
       type: "Escritorio",
       capacity: "1",
+      pricingModel: "PER_SPACE",
       pricePerHour: "15000",
+      pricePerPerson: "",
       imageUrl: DEFAULT_FALLBACK_IMAGE,
     });
+  };
+
+  const openCreateModal = () => {
+    resetModalState();
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (space: Space) => {
+    revokeBlobPreview(previewUrl);
+    setSelectedFile(null);
+    setEditingSpace(space);
+    setPreviewUrl(space.imageUrl);
+    setFormData({
+      name: space.name,
+      description: space.description,
+      type: space.type,
+      capacity: String(space.capacity),
+      pricingModel: space.pricingModel ?? "PER_SPACE",
+      pricePerHour: space.pricePerHour > 0 ? String(space.pricePerHour) : "",
+      pricePerPerson:
+        space.pricePerPerson !== null && space.pricePerPerson !== undefined
+          ? String(space.pricePerPerson)
+          : "",
+      imageUrl: space.imageUrl,
+    });
+    setIsModalOpen(true);
   };
 
   const handleToggleActive = async (space: Space) => {
@@ -99,13 +146,13 @@ export default function AdminSpacesPage() {
     }
   };
 
-  const handleCreateSpace = async (e: React.FormEvent) => {
+  const handleSaveSpace = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setFeedback(null);
 
     try {
-      let imageToSave = formData.imageUrl;
+      let uploadedImageKey: string | undefined;
 
       // 1. Si el administrador seleccionó una imagen local, subirla primero a AWS S3
       if (selectedFile) {
@@ -118,51 +165,104 @@ export default function AdminSpacesPage() {
           body: uploadBody,
         });
 
-        const uploadData = await uploadRes.json();
-
         if (!uploadRes.ok) {
-          setFeedback({
-            type: "error",
-            text: uploadData.error || "Error al subir la imagen a AWS S3.",
-          });
+          if (uploadRes.status === 413) {
+            setFeedback({
+              type: "error",
+              text: "La imagen supera el tamaño máximo permitido (5 MB). Selecciona una más ligera.",
+            });
+          } else {
+            const uploadData = await uploadRes.json().catch(() => ({}));
+            setFeedback({
+              type: "error",
+              text: uploadData.error || `Error al subir la imagen a AWS S3 (HTTP ${uploadRes.status}).`,
+            });
+          }
           setIsSubmitting(false);
           return;
         }
 
-        imageToSave = uploadData.key;
+        const uploadData = await uploadRes.json();
+        uploadedImageKey = uploadData.key;
       }
 
-      const parsedCapacity = Number(formData.capacity) > 0 ? Number(formData.capacity) : 1;
-      const parsedPricePerHour = Number(formData.pricePerHour) >= 0 ? Number(formData.pricePerHour) : 0;
+      const parsedCapacity = Number(formData.capacity);
+      const parsedPricePerHour =
+        formData.pricePerHour.trim() === "" ? 0 : Number(formData.pricePerHour);
+      const parsedPricePerPerson =
+        formData.pricePerPerson.trim() === "" ? null : Number(formData.pricePerPerson);
 
-      // 2. Crear el espacio en RDS con la key de S3
-      const res = await fetch("/api/spaces", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
+      if (editingSpace) {
+        const payload: Record<string, unknown> = {
+          name: formData.name,
+          description: formData.description,
+          type: formData.type,
           capacity: parsedCapacity,
+          pricingModel: formData.pricingModel,
           pricePerHour: parsedPricePerHour,
-          imageUrl: imageToSave,
-        }),
-      });
+          pricePerPerson: formData.pricingModel === "PER_SPACE" ? null : parsedPricePerPerson,
+        };
+        if (uploadedImageKey) {
+          payload.imageUrl = uploadedImageKey;
+        }
 
-      const data = await res.json();
+        const res = await fetch(`/api/spaces/${editingSpace.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
 
-      if (!res.ok) {
-        setFeedback({ type: "error", text: data.error || "Error al crear el espacio." });
-        return;
+        const data = await res.json();
+
+        if (!res.ok) {
+          setFeedback({ type: "error", text: data.error || "Error al actualizar el espacio." });
+          return;
+        }
+
+        setSpaces((prev) =>
+          prev.map((s) => (s.id === editingSpace.id ? data.space : s))
+        );
+        setFeedback({
+          type: "success",
+          text: uploadedImageKey
+            ? "¡Espacio actualizado y nueva fotografía almacenada en AWS S3!"
+            : `¡Espacio "${data.space.name}" actualizado exitosamente!`,
+        });
+        setIsModalOpen(false);
+        resetModalState();
+      } else {
+        const res = await fetch("/api/spaces", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: formData.name,
+            description: formData.description,
+            type: formData.type,
+            capacity: parsedCapacity,
+            pricingModel: formData.pricingModel,
+            pricePerHour: parsedPricePerHour,
+            pricePerPerson: formData.pricingModel === "PER_SPACE" ? null : parsedPricePerPerson,
+            imageUrl: uploadedImageKey ?? formData.imageUrl,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setFeedback({ type: "error", text: data.error || "Error al crear el espacio." });
+          return;
+        }
+
+        setFeedback({
+          type: "success",
+          text: uploadedImageKey
+            ? "¡Espacio creado y fotografía almacenada en AWS S3!"
+            : "¡Nuevo espacio creado satisfactoriamente!",
+        });
+        setIsModalOpen(false);
+        resetModalState();
+        fetchSpaces();
       }
-
-      setFeedback({
-        type: "success",
-        text: selectedFile
-          ? "¡Espacio creado y fotografía almacenada en AWS S3!"
-          : "¡Nuevo espacio creado satisfactoriamente!",
-      });
-      setIsModalOpen(false);
-      resetModalState();
-      fetchSpaces();
     } catch {
       setFeedback({ type: "error", text: "Error de conexión al guardar el espacio." });
     } finally {
@@ -187,7 +287,7 @@ export default function AdminSpacesPage() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={openCreateModal}
             className="px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl text-white bg-[#6D28D9] hover:bg-[#5B21B6] transition-all shadow-md shadow-purple-600/20 cursor-pointer"
           >
             + Añadir Nuevo Espacio
@@ -231,7 +331,7 @@ export default function AdminSpacesPage() {
             No hay espacios dados de alta en la base de datos.
           </p>
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={openCreateModal}
             className="mt-3 px-4 py-2 text-xs font-bold text-white bg-[#6D28D9] rounded-xl hover:bg-[#5B21B6]"
           >
             Crear el primer espacio
@@ -282,30 +382,52 @@ export default function AdminSpacesPage() {
                 </div>
               </div>
 
-              <div className="p-5 pt-0 border-t border-gray-100 dark:border-slate-800 mt-4 flex items-center justify-between">
+              <div className="p-5 pt-4 border-t border-gray-100 dark:border-slate-800 mt-4 flex items-center justify-between gap-2">
                 <div>
                   <span className="text-[10px] font-bold uppercase text-gray-400 dark:text-slate-400 block">Tarifa</span>
-                  <span className="text-sm font-black text-[#111827] dark:text-white">
-                    {new Intl.NumberFormat("es-CO", {
-                      style: "currency",
-                      currency: "COP",
-                      maximumFractionDigits: 0,
-                    }).format(s.pricePerHour)}
-                    /h
-                  </span>
+                  {(s.pricingModel === "PER_SPACE" || s.pricingModel === "BOTH" || !s.pricingModel) && (
+                    <span className="text-sm font-black text-[#111827] dark:text-white block">
+                      {new Intl.NumberFormat("es-CO", {
+                        style: "currency",
+                        currency: "COP",
+                        maximumFractionDigits: 0,
+                      }).format(s.pricePerHour)}
+                      <span className="text-[11px] font-semibold text-gray-500 dark:text-slate-400"> /h espacio</span>
+                    </span>
+                  )}
+                  {(s.pricingModel === "PER_PERSON" || s.pricingModel === "BOTH") &&
+                    s.pricePerPerson !== null &&
+                    s.pricePerPerson !== undefined && (
+                      <span className="text-xs font-bold text-[#6D28D9] dark:text-[#A78BFA] block">
+                        {new Intl.NumberFormat("es-CO", {
+                          style: "currency",
+                          currency: "COP",
+                          maximumFractionDigits: 0,
+                        }).format(s.pricePerPerson)}
+                        <span className="font-semibold text-gray-500 dark:text-slate-400"> /h persona</span>
+                      </span>
+                    )}
                 </div>
 
-                <button
-                  onClick={() => handleToggleActive(s)}
-                  disabled={togglingId === s.id}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                    s.isActive
-                      ? "text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-950/40"
-                      : "text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
-                  }`}
-                >
-                  {togglingId === s.id ? "Guardando..." : s.isActive ? "Deshabilitar" : "Habilitar"}
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => openEditModal(s)}
+                    className="px-3 py-1.5 text-xs font-bold rounded-xl text-[#6D28D9] dark:text-[#A78BFA] border border-[#6D28D9]/30 dark:border-[#8B5CF6]/40 hover:bg-[#6D28D9]/10 transition-all cursor-pointer"
+                  >
+                    Editar
+                  </button>
+                  <button
+                    onClick={() => handleToggleActive(s)}
+                    disabled={togglingId === s.id}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                      s.isActive
+                        ? "text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-950/40"
+                        : "text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                    }`}
+                  >
+                    {togglingId === s.id ? "Guardando..." : s.isActive ? "Deshabilitar" : "Habilitar"}
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -316,7 +438,9 @@ export default function AdminSpacesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
           <div className="bg-white dark:bg-[#1E293B] rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-gray-100 dark:border-slate-800 space-y-5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-black text-[#111827] dark:text-white">Crear Nuevo Espacio</h2>
+              <h2 className="text-xl font-black text-[#111827] dark:text-white">
+                {editingSpace ? "Editar Espacio" : "Crear Nuevo Espacio"}
+              </h2>
               <button
                 onClick={() => {
                   setIsModalOpen(false);
@@ -328,7 +452,7 @@ export default function AdminSpacesPage() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateSpace} className="space-y-4 text-xs sm:text-sm">
+            <form onSubmit={handleSaveSpace} className="space-y-4 text-xs sm:text-sm">
               <div>
                 <label className="block font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1 text-[11px]">
                   Nombre del Espacio
@@ -391,18 +515,64 @@ export default function AdminSpacesPage() {
 
               <div>
                 <label className="block font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1 text-[11px]">
-                  Precio Hora (COP)
+                  Modalidad de Tarifa
                 </label>
-                <input
-                  type="number"
-                  min="1000"
-                  step="1000"
-                  required
-                  placeholder="Ej. 25000"
-                  value={formData.pricePerHour}
-                  onChange={(e) => setFormData({ ...formData, pricePerHour: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#6D28D9]"
-                />
+                <select
+                  value={formData.pricingModel}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      pricingModel: e.target.value as PricingModel,
+                    })
+                  }
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#6D28D9] cursor-pointer"
+                >
+                  <option value="PER_SPACE">Alquiler del espacio completo</option>
+                  <option value="PER_PERSON">Pase por persona</option>
+                  <option value="BOTH">Ambos (espacio completo o por persona)</option>
+                </select>
+              </div>
+
+              <div
+                className={`grid gap-3 ${
+                  formData.pricingModel === "BOTH" ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"
+                }`}
+              >
+                {(formData.pricingModel === "PER_SPACE" || formData.pricingModel === "BOTH") && (
+                  <div>
+                    <label className="block font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1 text-[11px]">
+                      Precio Espacio / Hora (COP)
+                    </label>
+                    <input
+                      type="number"
+                      min="1000"
+                      step="1000"
+                      required
+                      placeholder="Ej. 60000"
+                      value={formData.pricePerHour}
+                      onChange={(e) => setFormData({ ...formData, pricePerHour: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#6D28D9]"
+                    />
+                  </div>
+                )}
+
+                {(formData.pricingModel === "PER_PERSON" || formData.pricingModel === "BOTH") && (
+                  <div>
+                    <label className="block font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1 text-[11px]">
+                      Precio por Persona / Hora (COP)
+                    </label>
+                    <input
+                      type="number"
+                      min="1000"
+                      step="1000"
+                      required
+                      placeholder="Ej. 15000"
+                      value={formData.pricePerPerson}
+                      onChange={(e) => setFormData({ ...formData, pricePerPerson: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#6D28D9]"
+                    />
+                  </div>
+                )}
               </div>
 
               <div>
@@ -447,7 +617,9 @@ export default function AdminSpacesPage() {
                     ? selectedFile
                       ? "Subiendo a S3..."
                       : "Guardando..."
-                    : "Crear Espacio"}
+                    : editingSpace
+                      ? "Guardar Cambios"
+                      : "Crear Espacio"}
                 </button>
               </div>
             </form>

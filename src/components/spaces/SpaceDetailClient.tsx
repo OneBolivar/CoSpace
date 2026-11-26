@@ -45,9 +45,18 @@ export function SpaceDetailClient({ space }: SpaceDetailClientProps) {
   const initialDates = getDefaultDates();
   const [startTime, setStartTime] = useState(initialDates.start);
   const [endTime, setEndTime] = useState(initialDates.end);
+  const [selectedPricingModel, setSelectedPricingModel] = useState<"PER_SPACE" | "PER_PERSON">(
+    space.pricingModel === "PER_PERSON" ? "PER_PERSON" : "PER_SPACE"
+  );
+  const [guests, setGuests] = useState<number>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const activeUnitRate =
+    selectedPricingModel === "PER_PERSON"
+      ? (space.pricePerPerson ?? 0)
+      : space.pricePerHour;
 
   // Cálculo dinámico de horas y costo total
   const { totalHours, totalPrice, isValidDuration, durationError } = useMemo(() => {
@@ -170,7 +179,10 @@ export function SpaceDetailClient({ space }: SpaceDetailClientProps) {
     }
 
     const roundedHours = hours;
-    const calculatedPrice = roundedHours * space.pricePerHour;
+    const calculatedPrice =
+      selectedPricingModel === "PER_PERSON"
+        ? roundedHours * activeUnitRate * guests
+        : roundedHours * activeUnitRate;
 
     return {
       totalHours: roundedHours,
@@ -178,13 +190,13 @@ export function SpaceDetailClient({ space }: SpaceDetailClientProps) {
       isValidDuration: true,
       durationError: null,
     };
-  }, [startTime, endTime, space.pricePerHour, locale]);
+  }, [startTime, endTime, activeUnitRate, selectedPricingModel, guests, locale]);
 
   const formattedHourlyRate = new Intl.NumberFormat(locale === "es" ? "es-CO" : "en-US", {
     style: "currency",
     currency: "COP",
     maximumFractionDigits: 0,
-  }).format(space.pricePerHour);
+  }).format(activeUnitRate);
 
   const formattedTotalPrice = new Intl.NumberFormat(locale === "es" ? "es-CO" : "en-US", {
     style: "currency",
@@ -216,6 +228,8 @@ export function SpaceDetailClient({ space }: SpaceDetailClientProps) {
           spaceId: space.id,
           startTime: new Date(startTime).toISOString(),
           endTime: new Date(endTime).toISOString(),
+          pricingModel: selectedPricingModel,
+          guests: selectedPricingModel === "PER_PERSON" ? guests : 1,
         }),
       });
 
@@ -336,7 +350,9 @@ export function SpaceDetailClient({ space }: SpaceDetailClientProps) {
                 </span>
               </div>
               <span className="text-xs font-bold text-gray-500 dark:text-slate-400">
-                {t.spaceDetail.hourlyRate}
+                {selectedPricingModel === "PER_PERSON"
+                  ? t.spaceDetail.perPersonRate
+                  : t.spaceDetail.hourlyRate}
               </span>
             </div>
 
@@ -371,6 +387,79 @@ export function SpaceDetailClient({ space }: SpaceDetailClientProps) {
             {/* Formulario de Reserva */}
             {!successMessage && (
               <form onSubmit={handleBooking} className="space-y-4">
+                {space.pricingModel === "BOTH" && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                      {t.spaceDetail.pricingModelLabel}
+                    </label>
+                    <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPricingModel("PER_SPACE")}
+                        className={`py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          selectedPricingModel === "PER_SPACE"
+                            ? "bg-white dark:bg-[#1E293B] text-[#6D28D9] dark:text-[#A78BFA] shadow-xs"
+                            : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-200"
+                        }`}
+                      >
+                        {t.spaceDetail.rentFullSpace}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPricingModel("PER_PERSON")}
+                        className={`py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          selectedPricingModel === "PER_PERSON"
+                            ? "bg-white dark:bg-[#1E293B] text-[#6D28D9] dark:text-[#A78BFA] shadow-xs"
+                            : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-200"
+                        }`}
+                      >
+                        {t.spaceDetail.passPerPerson}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {selectedPricingModel === "PER_PERSON" && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                      {t.spaceDetail.guestsLabel} (1–{space.capacity})
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setGuests((g) => Math.max(1, g - 1))}
+                        disabled={guests <= 1}
+                        className="w-10 h-10 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-gray-800 dark:text-slate-200 font-black text-base hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-40 cursor-pointer"
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        min={1}
+                        max={space.capacity}
+                        value={guests}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (Number.isNaN(val)) {
+                            setGuests(1);
+                          } else {
+                            setGuests(Math.min(space.capacity, Math.max(1, val)));
+                          }
+                        }}
+                        className="flex-1 text-center px-3.5 py-2.5 text-sm font-bold rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#6D28D9]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setGuests((g) => Math.min(space.capacity, g + 1))}
+                        disabled={guests >= space.capacity}
+                        className="w-10 h-10 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-gray-800 dark:text-slate-200 font-black text-base hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-40 cursor-pointer"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
                     {t.spaceDetail.startTime}
@@ -405,14 +494,33 @@ export function SpaceDetailClient({ space }: SpaceDetailClientProps) {
                     <span>{t.spaceDetail.calculatedDuration}</span>
                     <span className="font-bold text-[#111827] dark:text-white">
                       {isValidDuration
-                        ? `${totalHours} ${totalHours > 1 ? t.spaceDetail.persons : t.spaceDetail.person}`.replace(/personas|people/, "hrs")
+                        ? `${totalHours} ${totalHours === 1 ? t.spaceDetail.hourShort : t.spaceDetail.hoursShort}`
                         : "--"}
                     </span>
                   </div>
                   <div className="flex justify-between text-gray-600 dark:text-slate-300">
                     <span>{t.spaceDetail.unitRate}</span>
-                    <span>{formattedHourlyRate} / hr</span>
+                    <span>
+                      {formattedHourlyRate} /{" "}
+                      {selectedPricingModel === "PER_PERSON"
+                        ? t.spaceDetail.perPersonUnit
+                        : t.spaceDetail.hourShort}
+                    </span>
                   </div>
+                  {selectedPricingModel === "PER_PERSON" && (
+                    <div className="flex justify-between text-gray-600 dark:text-slate-300">
+                      <span>{t.spaceDetail.guestsLabel}:</span>
+                      <span className="font-bold text-[#111827] dark:text-white">
+                        {guests} {guests === 1 ? t.spaceDetail.guestUnit : t.spaceDetail.guestsUnit}
+                      </span>
+                    </div>
+                  )}
+                  {isValidDuration && selectedPricingModel === "PER_PERSON" && (
+                    <div className="text-[11px] text-gray-400 dark:text-slate-400 text-right">
+                      {totalHours} {totalHours === 1 ? t.spaceDetail.hourShort : t.spaceDetail.hoursShort} × {formattedHourlyRate} × {guests}{" "}
+                      {guests === 1 ? t.spaceDetail.guestUnit : t.spaceDetail.guestsUnit}
+                    </div>
+                  )}
                   <div className="pt-2 border-t border-gray-200 dark:border-slate-700 flex justify-between items-baseline font-black text-sm sm:text-base">
                     <span className="text-[#111827] dark:text-white">{t.spaceDetail.totalCost}</span>
                     <span className="text-[#6D28D9] dark:text-[#A78BFA] text-lg sm:text-xl">

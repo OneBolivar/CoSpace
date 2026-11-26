@@ -6,7 +6,7 @@ import {
   resolveSpaceImageUrl,
   resolveSpaceThumbnailUrl,
 } from "@/lib/s3/storage.service";
-import { Prisma, Role } from "@prisma/client";
+import { PricingModel, Prisma, Role } from "@prisma/client";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
@@ -39,9 +39,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     if (maxPrice && !isNaN(Number(maxPrice))) {
-      whereClause.pricePerHour = {
-        lte: parseFloat(maxPrice),
-      };
+      const maxPriceNum = parseFloat(maxPrice);
+      whereClause.OR = [
+        {
+          pricingModel: { in: [PricingModel.PER_SPACE, PricingModel.BOTH] },
+          pricePerHour: { lte: maxPriceNum },
+        },
+        {
+          pricingModel: PricingModel.PER_PERSON,
+          pricePerPerson: { lte: maxPriceNum },
+        },
+      ];
     }
 
     const rawSpaces = await prisma.space.findMany({
@@ -87,13 +95,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    const pricingModel: PricingModel = body.pricingModel ?? PricingModel.PER_SPACE;
+    const pricePerHour =
+      pricingModel === PricingModel.PER_PERSON
+        ? Number(body.pricePerHour) > 0
+          ? Number(body.pricePerHour)
+          : 0
+        : Number(body.pricePerHour);
+    const pricePerPerson =
+      pricingModel === PricingModel.PER_SPACE
+        ? null
+        : Number(body.pricePerPerson);
+
     const newSpace = await prisma.space.create({
       data: {
         name: body.name.trim(),
         description: body.description.trim(),
         type: body.type.trim(),
         capacity: Number(body.capacity),
-        pricePerHour: Number(body.pricePerHour),
+        pricingModel,
+        pricePerHour,
+        pricePerPerson,
         imageUrl: body.imageUrl.trim(),
         isActive: body.isActive ?? true,
       },

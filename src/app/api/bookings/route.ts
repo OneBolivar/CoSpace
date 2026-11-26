@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "@/lib/auth";
 import { validateBookingDates } from "@/lib/validators";
-import { Role } from "@prisma/client";
+import { PricingModel, Role } from "@prisma/client";
 
 // GET /api/bookings - Listar reservas (propias para USER, todas para ADMIN)
 export async function GET(): Promise<NextResponse> {
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const body = await request.json();
-    const { spaceId, startTime, endTime } = body;
+    const { spaceId, startTime, endTime, guests: rawGuests, pricingModel: rawPricingModel } = body;
 
     if (!spaceId || typeof spaceId !== "string") {
       return NextResponse.json(
@@ -106,6 +106,51 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!space.isActive) {
       return NextResponse.json(
         { error: "Este espacio se encuentra inactivo y no admite reservas." },
+        { status: 400 }
+      );
+    }
+
+    // Validar cantidad de asistentes (guests)
+    const guests = rawGuests !== undefined ? Number(rawGuests) : 1;
+    if (!Number.isInteger(guests) || guests < 1 || guests > space.capacity) {
+      return NextResponse.json(
+        {
+          error: `La cantidad de asistentes debe estar entre 1 y ${space.capacity}.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Validar modalidad de tarifa elegida según configuración del espacio
+    let effectivePricingModel: PricingModel;
+    if (space.pricingModel === PricingModel.BOTH) {
+      if (
+        rawPricingModel !== undefined &&
+        rawPricingModel !== PricingModel.PER_SPACE &&
+        rawPricingModel !== PricingModel.PER_PERSON
+      ) {
+        return NextResponse.json(
+          { error: "Modalidad de tarifa no válida para este espacio." },
+          { status: 400 }
+        );
+      }
+      effectivePricingModel = rawPricingModel ?? PricingModel.PER_SPACE;
+    } else {
+      if (rawPricingModel !== undefined && rawPricingModel !== space.pricingModel) {
+        return NextResponse.json(
+          { error: "La modalidad seleccionada no está habilitada para este espacio." },
+          { status: 400 }
+        );
+      }
+      effectivePricingModel = space.pricingModel;
+    }
+
+    if (
+      effectivePricingModel === PricingModel.PER_PERSON &&
+      (!space.pricePerPerson || space.pricePerPerson <= 0)
+    ) {
+      return NextResponse.json(
+        { error: "Este espacio no tiene configurada una tarifa por persona válida." },
         { status: 400 }
       );
     }
@@ -169,8 +214,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // 6. Cálculo seguro de precio en el servidor (horas * pricePerHour). Se ignora cualquier valor cliente.
-    const totalPrice = space.pricePerHour * totalHours;
+    // 6. Cálculo seguro de precio en el servidor según modalidad elegida. Se ignora cualquier valor cliente.
+    const totalPrice =
+      effectivePricingModel === PricingModel.PER_PERSON
+        ? (space.pricePerPerson ?? 0) * totalHours * guests
+        : space.pricePerHour * totalHours;
 
     // 7. Crear la reserva confirmada
     const newBooking = await prisma.booking.create({
@@ -180,6 +228,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         startTime: start,
         endTime: end,
         totalHours,
+        guests,
+        pricingModel: effectivePricingModel,
         totalPrice,
         status: "CONFIRMED",
       },

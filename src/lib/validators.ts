@@ -160,18 +160,39 @@ export function validateSpaceData(data: Partial<SpaceInput>): ValidationResult {
     };
   }
 
-  if (typeof data.capacity !== "number" || data.capacity < 1) {
+  if (typeof data.capacity !== "number" || !Number.isInteger(data.capacity) || data.capacity < 1) {
     return {
       isValid: false,
       error: "La capacidad debe ser un número entero mayor a 0.",
     };
   }
 
-  if (typeof data.pricePerHour !== "number" || data.pricePerHour <= 0) {
+  const validPricingModels = ["PER_SPACE", "PER_PERSON", "BOTH"] as const;
+  const pricingModel = data.pricingModel ?? "PER_SPACE";
+
+  if (!validPricingModels.includes(pricingModel)) {
     return {
       isValid: false,
-      error: "El precio por hora debe ser mayor a 0.",
+      error: "La modalidad de tarifa no es válida (PER_SPACE, PER_PERSON o BOTH).",
     };
+  }
+
+  if (pricingModel === "PER_SPACE" || pricingModel === "BOTH") {
+    if (typeof data.pricePerHour !== "number" || Number.isNaN(data.pricePerHour) || data.pricePerHour <= 0) {
+      return {
+        isValid: false,
+        error: "El precio por hora del espacio debe ser mayor a 0.",
+      };
+    }
+  }
+
+  if (pricingModel === "PER_PERSON" || pricingModel === "BOTH") {
+    if (typeof data.pricePerPerson !== "number" || Number.isNaN(data.pricePerPerson) || data.pricePerPerson <= 0) {
+      return {
+        isValid: false,
+        error: "El precio por persona/hora debe ser mayor a 0.",
+      };
+    }
   }
 
   if (

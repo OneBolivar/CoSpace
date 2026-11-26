@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "@/lib/auth";
+import { validateSpaceData } from "@/lib/validators";
 import { resolveSpaceImageUrl } from "@/lib/s3/storage.service";
-import { Role } from "@prisma/client";
+import { PricingModel, Role } from "@prisma/client";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -107,15 +108,71 @@ export async function PATCH(
       }
     }
 
+    const isOnlyToggle =
+      Object.keys(body).length === 1 && body.isActive !== undefined;
+
+    if (!isOnlyToggle) {
+      const candidatePricingModel: PricingModel =
+        body.pricingModel !== undefined ? body.pricingModel : existingSpace.pricingModel;
+      const candidatePricePerHour =
+        body.pricePerHour !== undefined ? Number(body.pricePerHour) : existingSpace.pricePerHour;
+      const candidatePricePerPerson =
+        body.pricePerPerson !== undefined
+          ? body.pricePerPerson === null || body.pricePerPerson === ""
+            ? null
+            : Number(body.pricePerPerson)
+          : existingSpace.pricePerPerson;
+
+      const validation = validateSpaceData({
+        name: body.name !== undefined ? String(body.name) : existingSpace.name,
+        description:
+          body.description !== undefined ? String(body.description) : existingSpace.description,
+        type: body.type !== undefined ? String(body.type) : existingSpace.type,
+        capacity: body.capacity !== undefined ? Number(body.capacity) : existingSpace.capacity,
+        pricingModel: candidatePricingModel,
+        pricePerHour: candidatePricePerHour,
+        pricePerPerson: candidatePricePerPerson,
+        imageUrl: body.imageUrl !== undefined ? String(body.imageUrl) : existingSpace.imageUrl,
+      });
+
+      if (!validation.isValid) {
+        return NextResponse.json(
+          { error: validation.error },
+          { status: 400 }
+        );
+      }
+    }
+
+    const nextPricingModel: PricingModel =
+      body.pricingModel !== undefined ? body.pricingModel : existingSpace.pricingModel;
+    const nextPricePerHour =
+      body.pricePerHour !== undefined
+        ? Number(body.pricePerHour) > 0
+          ? Number(body.pricePerHour)
+          : 0
+        : existingSpace.pricePerHour;
+    const nextPricePerPerson =
+      nextPricingModel === PricingModel.PER_SPACE
+        ? null
+        : body.pricePerPerson !== undefined
+          ? Number(body.pricePerPerson)
+          : existingSpace.pricePerPerson;
+
     const updatedSpace = await prisma.space.update({
       where: { id },
       data: {
-        ...(body.name && { name: body.name.trim() }),
-        ...(body.description && { description: body.description.trim() }),
-        ...(body.type && { type: body.type.trim() }),
+        ...(body.name !== undefined && { name: String(body.name).trim() }),
+        ...(body.description !== undefined && { description: String(body.description).trim() }),
+        ...(body.type !== undefined && { type: String(body.type).trim() }),
         ...(body.capacity !== undefined && { capacity: Number(body.capacity) }),
-        ...(body.pricePerHour !== undefined && { pricePerHour: Number(body.pricePerHour) }),
-        ...(body.imageUrl && { imageUrl: body.imageUrl.trim() }),
+        ...(body.pricingModel !== undefined && { pricingModel: nextPricingModel }),
+        ...((body.pricePerHour !== undefined || body.pricingModel !== undefined) && {
+          pricePerHour: nextPricePerHour,
+        }),
+        ...((body.pricePerPerson !== undefined || body.pricingModel !== undefined) && {
+          pricePerPerson: nextPricePerPerson,
+        }),
+        ...(body.imageUrl !== undefined && { imageUrl: String(body.imageUrl).trim() }),
         ...(body.isActive !== undefined && { isActive: Boolean(body.isActive) }),
       },
     });
@@ -123,7 +180,10 @@ export async function PATCH(
     return NextResponse.json(
       {
         message: "Espacio actualizado exitosamente.",
-        space: updatedSpace,
+        space: {
+          ...updatedSpace,
+          imageUrl: await resolveSpaceImageUrl(updatedSpace.imageUrl),
+        },
       },
       { status: 200 }
     );

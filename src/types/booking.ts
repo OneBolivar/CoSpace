@@ -1,6 +1,10 @@
-import { BookingStatus as PrismaBookingStatus } from "@prisma/client";
+import {
+  BookingStatus as PrismaBookingStatus,
+  PricingModel as PrismaPricingModel,
+} from "@prisma/client";
 
 export type BookingStatus = PrismaBookingStatus;
+export type PricingModel = PrismaPricingModel;
 
 export interface BookingSpace {
   id: string;
@@ -23,6 +27,8 @@ export interface Booking {
   startTime: string | Date;
   endTime: string | Date;
   totalHours: number;
+  guests: number;
+  pricingModel: PricingModel;
   totalPrice: number;
   status: BookingStatus;
   createdAt: string | Date;
